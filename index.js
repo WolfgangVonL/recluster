@@ -11,6 +11,8 @@ var isProduction = process.env.NODE_ENV == 'production';
  * Creates a load balancer
  * @param file          {String} path to the module that defines the server
  * @param opt           {Object} options
+ * @param opt.fileIsLib {Boolean} use the file as a library which is unique method
+ * @param opt.libArgs   {Array} arguments to pass to the library method
  * @param opt.workers   {Number} number of active workers
  * @param opt.timeout   {Number} kill timeout for old workers after reload (sec)
  * @param opt.respawn   {Number} min time between respawns when workers die
@@ -25,6 +27,8 @@ var isProduction = process.env.NODE_ENV == 'production';
 module.exports = function(file, opt) {
 
     opt = opt || {};
+    opt.fileIsLib = opt.fileIsLib || false;
+    opt.libArgs = opt.libArgs || [];
     opt.workers = opt.workers || numCPUs;
     opt.timeout = opt.timeout || (isProduction ? 3600 : 1);
     opt.readyWhen = opt.readyWhen || 'listening';
@@ -153,36 +157,44 @@ module.exports = function(file, opt) {
     function workerEmitExit(w) { emit('exit', w); }
 
     self.run = function() {
-        if (!cluster.isMaster) return;
-        cluster.setupMaster({exec: file});
-        cluster.settings.args = opt.args;
-        cluster.settings.execArgv = opt.execArgv;
-        for (var i = 0; i < opt.workers; i++) fork(i);
+        if (cluster.isMaster) {
+            if (!opt.fileIsLib) {  
+                cluster.setupMaster({exec: file});
+            }
+            cluster.settings.args = opt.args;
+            cluster.settings.execArgv = opt.execArgv;
+            for (var i = 0; i < opt.workers; i++) fork(i);
 
-        cluster.on('exit', workerEmitExit);
-        cluster.on('disconnect', workerDisconnect);
-        cluster.on('listening', workerListening);
-        cluster.on('online', workerOnline);
+            cluster.on('exit', workerEmitExit);
+            cluster.on('disconnect', workerDisconnect);
+            cluster.on('listening', workerListening);
+            cluster.on('online', workerOnline);
 
-        channel.on(readyEvent, function workerReady(w, arg) {
-            // ignore unrelated messages when readyEvent = message
-            if (readyEvent === 'message'
-                && (!arg || arg.cmd != readyCommand)) return;
-            emit('ready', w, arg);
-        });
-        // When a worker exits, try to replace it
-        channel.on('exit', workerReplace);
-        // When it closes the IPC channel or signals that it can no longer
-        // do any processing, replace it and then set up a termination timeout
-        channel.on('disconnect', workerReplaceTimeoutTerminate);
-        channel.on('message', function workerDisconnectMsg(w, arg) {
-            if (arg && arg.cmd === 'disconnect')
-                workerReplaceTimeoutTerminate(w);
-        });
-        // When a worker becomes ready, add it to the active list
-        channel.on('ready', function workerReady(w) {
-            activeWorkers[w._rc_wid] = w;
-        })
+            channel.on(readyEvent, function workerReady(w, arg) {
+                // ignore unrelated messages when readyEvent = message
+                if (readyEvent === 'message'
+                    && (!arg || arg.cmd != readyCommand)) return;
+                emit('ready', w, arg);
+            });
+            // When a worker exits, try to replace it
+            channel.on('exit', workerReplace);
+            // When it closes the IPC channel or signals that it can no longer
+            // do any processing, replace it and then set up a termination timeout
+            channel.on('disconnect', workerReplaceTimeoutTerminate);
+            channel.on('message', function workerDisconnectMsg(w, arg) {
+                if (arg && arg.cmd === 'disconnect')
+                    workerReplaceTimeoutTerminate(w);
+            });
+            // When a worker becomes ready, add it to the active list
+            channel.on('ready', function workerReady(w) {
+                activeWorkers[w._rc_wid] = w;
+            })
+        } else {
+            if (opt.fileIsLib) { 
+                const workerLib = require(file);
+                workerLib(libArgs);   
+            }
+        }
 
     }
 
