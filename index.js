@@ -192,7 +192,7 @@ module.exports = function(file, opt) {
         } else {
             if (opt.fileIsLib) { 
                 const workerLib = require(file);
-                workerLib(libArgs);   
+                workerLib(opt.libArgs);   
             }
         }
 
