@@ -12,7 +12,7 @@ var isProduction = process.env.NODE_ENV == 'production';
  * @param file          {String} path to the module that defines the server
  * @param opt           {Object} options
  * @param opt.fileIsLib {Boolean} use the file as a library which is unique method
- * @param opt.libArgs   {Array} arguments to pass to the library method
+ * @param opt.libArgs   {Object} arguments to pass to the library method
  * @param opt.workers   {Number} number of active workers
  * @param opt.timeout   {Number} kill timeout for old workers after reload (sec)
  * @param opt.respawn   {Number} min time between respawns when workers die
@@ -28,7 +28,7 @@ module.exports = function(file, opt) {
 
     opt = opt || {};
     opt.fileIsLib = opt.fileIsLib || false;
-    opt.libArgs = opt.libArgs || [];
+    opt.libArgs = opt.libArgs || {};
     opt.workers = opt.workers || numCPUs;
     opt.timeout = opt.timeout || (isProduction ? 3600 : 1);
     opt.readyWhen = opt.readyWhen || 'listening';
